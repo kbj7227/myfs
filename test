@@ -1,0 +1,192 @@
+#include<stdio.h>
+#include<string.h>
+#include<stdlib.h>
+#include<math.h>
+#include<time.h>
+#define tm_year tm_year+1900
+#define tm_mon tm_mon+1
+
+typedef struct{
+	long inode_check[8];
+	long data_check[16];
+}super_block;
+
+typedef struct inode_block{
+	_Bool file_type; // 0:file , 1:directory
+	int file_size;
+	struct tm* modified_time;
+	short db_n[3]; // 0:direct 1:single 2:double
+}inode_block;
+
+typedef struct data_block{
+	char data[128];
+}data_block;
+
+super_block sb;
+inode_block *ib[512];
+data_block *db[1024];
+char location[5];
+FILE *wfs;
+
+int make_inode();
+int make_data();
+int input_prompt();
+
+void mymkfs(){
+	wfs=fopen("myfs","wb");
+	make_inode();
+	make_data();
+}
+
+void mymkdir(char tmp[]){
+	char dir_name[5];
+	char i;
+
+}
+
+
+int main(){
+	FILE *rfs;
+	char tmp[10];
+	time_t ltime;
+	time(&ltime);
+
+	while(1){
+		if((rfs=fopen("myfs","rb"))==NULL)
+			printf("error : can not find \"myfs\".\n");
+		else break;
+		scanf("%s",tmp);
+		if(0==strcmp("mymkfs",tmp)){ 
+			mymkfs();
+			getchar();
+			break;
+		}
+	}
+
+	input_prompt();
+	return 0;
+
+}
+int input_prompt(void )
+{
+	char tmp[40];
+	char order[13];
+	char prompt[40];
+	int i;
+	while(1)
+	{ 
+		printf("[/%s ]$ ",location);
+		scanf("%[^\n]",prompt);
+		getchar();
+
+
+		for(i=0;i<40;i++)
+		{  
+			if(prompt[i]==' ') break;
+			order[i]=prompt[i];
+		}
+
+
+
+		/*		 if(0==strcmp("mycat",order)) mycat(tmp);
+
+				else if(0==strcmp("myshowfile",order)) myshowfile(tmp);
+
+				else if(0==strcmp("mypwd",order)) mypwd(tmp);
+
+				else if(0==strcmp("mycd",order)) mycd(tmp);
+
+				else if(0==strcmp("mycp",order)) mycp(tmp);
+
+				else if(0==strcmp("mycpto",order)) mycpto(tmp);
+
+				else if(0==strcmp("mycpfrom",order)) mycpfrom(tmp);
+
+				else if(0==strcmp("mymkdir",order)) mymkdir(tmp);
+
+				else if(0==strcmp("myrmdir",order)) myrmdir(tmp);
+
+				else if(0==strcmp("myrm",order)) myrm(tmp);
+
+				else if(0==strcmp("mytouch",order)) mytouch(tmp);
+
+				else if(0==strcmp("myshowinode",order)) myshowinode(tmp);
+
+				else if(0==strcmp("myshowblock",order)) myshowblock(tmp);
+
+				else if(0==strcmp("mystate",order)) mystate(tmp);
+
+				else if(0==strcmp("mytree",order)) mytree(tmp);
+
+		 */
+		if(0==strcmp("byebye",order)) return 1;
+
+		else system(prompt);
+
+		fflush(stdin);
+	}
+}
+int make_inode(){
+	time_t ltime;
+	ltime=time(NULL);
+	time(&ltime);
+
+	int i,j,count=0;
+	unsigned long bit;
+	for(i=0;i<8;i++){
+		bit=0x1;
+		bit<<=63;
+		if(sb.inode_check[i]==-1){
+			count+=64;
+		}
+		else if(bit & sb.inode_check[i]){
+			for(j=0;j<64;j++){
+				if(bit & sb.inode_check[i]){
+					count++;
+					bit>>=1;
+				}
+				else{
+					sb.inode_check[count/64]|=bit;
+					break;
+				}
+			}
+		}
+		else{
+			sb.inode_check[count/64]|=bit;
+			break;
+		}
+	}
+
+	ib[count] = (inode_block*) calloc(1,sizeof(inode_block));
+	ib[count]->modified_time = localtime(&ltime);
+	return count;
+}
+int make_data(){
+	int i,j,count=0;
+	unsigned long bit;
+	for(i=0;i<16;i++){
+		bit=0x1;
+		bit<<=63;
+		if(sb.data_check[i]==-1){
+			count+=64;
+		}
+		else if(bit & sb.data_check[i]){
+			for(j=0;j<64;j++){
+				if(bit & sb.data_check[i]){
+					count++;
+					bit>>=1;
+				}
+				else{
+					sb.data_check[count/64]|=bit;
+					break;
+				}
+			}
+		}
+		else{
+			sb.data_check[count/64]|=bit;
+			break;
+		}
+	}
+	db[count] = (data_block*) calloc(1,sizeof(data_block));
+	return count;
+}
