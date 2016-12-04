@@ -1,0 +1,8 @@
+#include <stdlib.h>
+
+int main(void)
+{
+	system("dd if=/dev/zero of=./myfs bs=146626 count=1 &> /dev/null");
+	
+		return 0;
+}
