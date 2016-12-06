@@ -6,9 +6,8 @@
 #define tm_year tm_year+1900
 #define tm_mon tm_mon+1
 #define jumpsuper fseek(fs,sizeof(boot_block)+sizeof(super_block),SEEK_SET);
-#define jumpinode fseek(fs,(sizeof(boot_block)+sizeof(super_block)+sizeof(inode_block)*512),SEEK_SET);
 typedef struct{
-	int boot[2];
+	short boot;
 }boot_block;
 
 typedef struct{
@@ -19,8 +18,8 @@ typedef struct{
 typedef struct inode_block{
 	_Bool file_type; // 0:file , 1:directory
 	int file_size;
-	struct tm* modified_time;
-	short db_n[3]; // 0:direct 1:single 2:double
+	struct tm time;
+	unsigned short db_n[3]; // 0:direct 1:single 2:double
 }inode_block;
 
 typedef struct data_block{
@@ -46,46 +45,37 @@ int check_data();
 int input_prompt();
 
 void mymkfs(){
-	bb.boot[0]=0;
-	bb.boot[1]=0;
+	bb.boot=0;
+	short i;
 	fs=fopen("myfs","wb+");
 	fwrite(&bb,sizeof(boot_block),1,fs);
-	fwrite(&ib,sizeof(inode_block),512,fs);
-	fwrite(&db,sizeof(data_block),1024,fs);
+	fwrite(&sb,sizeof(super_block),1,fs);
+	for(i=0;i<512;i++){
+		fwrite(&ib,sizeof(inode_block),1,fs);
+	}
+	for(i=0;i<1024;i++){
+		fwrite(&db,sizeof(data_block),1,fs);
+	}
 	rewind(fs);
 }
-
 void mymkdir(char tmp[]){
-
-	char dir_name[4]={0};
-	char i;
-	unsigned short n,bit;
-	n=check_data();
-	for(i=0;i<4;i++)
-		db.data[i]=tmp[i];
-	n=check_inode();
-	bit=0x3fc&n;
-	bit>>=2;
-	printf("%d ",strlen(db.data));
-	db.data[strlen(db.data)]=bit;
-	db.data[strlen(db.data)+1]=0x3&n;
-	db.data[strlen(db.data)+2]='\0';
-	printf("%d ",strlen(db.data));
-	unsigned short result=0;
-	result+=db.data[(3)];
-	result<<=2;
-	result+=db.data[(4)];
-	printf("%u",result);
-
-
-
-
-
+	unsigned short ib_n,db_n;
+	ib_n=check_inode();
+	db_n=check_data();
+	struct tm* m_time;
+	time_t ltime;
+	time(&ltime);
+	m_time=localtime(&ltime);
+	ib.time=*m_time;
+	ib.file_type=1;
+	ib.db_n[0]=db_n;
+	ib.file_Size=0;
+	fseek(fs,sizeof(boot_block),SEEK_SET);
+	fwrite(&sb,sizeof(super_block),1,fs);     
 }
 
 
 int main(){
-	FILE *rfs;
 	char tmp[10];
 	time_t ltime;
 	time(&ltime);
@@ -95,6 +85,7 @@ int main(){
 
 	sb.data_check[0]=1;
 	sb.data_check[0]<<=63;
+
 
 	input_prompt();
 	return 0;
@@ -172,10 +163,6 @@ int input_prompt(void )
 	}
 }
 int check_inode(){
-	time_t ltime;
-	ltime=time(NULL);
-	time(&ltime);
-
 	int i,j,count=0;
 	unsigned long bit;
 	for(i=0;i<8;i++){
