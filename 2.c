@@ -1,0 +1,240 @@
+#include<stdio.h>
+#include<string.h>
+#include<stdlib.h>
+#include<math.h>
+#include<time.h>
+#define tm_year tm_year+1900
+#define tm_mon tm_mon+1
+typedef struct{
+	short boot;
+}boot_block;
+
+typedef struct{
+	unsigned long inode_check[8];
+	unsigned long data_check[16];
+}super_block;
+
+typedef struct inode_block{
+	_Bool file_type; // 0:file , 1:directory
+	int file_size;
+	struct tm time;
+	unsigned short db_n[3]; // 0:direct 1:single 2:double
+}inode_block;
+
+typedef struct data_block{
+	char data[128];
+}data_block;
+
+typedef struct data_list{
+	char data[128];
+	struct data_list *next;
+}data_list;
+
+boot_block bb; 
+super_block sb;
+inode_block *ib;
+data_block *db;
+char location[5];
+FILE *fs;
+data_list pwd;
+char name[512][5]; 
+
+int check_inode();
+int check_data();
+int input_prompt();
+unsigned short make_inode();
+unsigned short make_data();
+
+void mymkfs(){
+	bb.boot=0;
+	short i;
+	fs=fopen("myfs","wb+");
+	fwrite(&bb,sizeof(boot_block),1,fs);
+	fwrite(&sb,sizeof(super_block),1,fs);
+	for(i=0;i<512;i++){
+		fwrite(&ib,sizeof(inode_block),1,fs);
+	}
+	for(i=0;i<1024;i++){
+		fwrite(&db,sizeof(data_block),1,fs);
+	}
+	rewind(fs);
+}
+void mymkdir(char tmp[]){
+	unsigned short ib_n,db_n;
+	ib_n=check_inode();
+	db_n=check_data();
+	struct tm* m_time;
+	time_t ltime;
+	time(&ltime);
+	m_time=localtime(&ltime);
+	ib.time=*m_time;
+	ib.file_type=1;
+	ib.db_n[0]=db_n;
+	ib.file_Size=0;
+	fseek(fs,sizeof(boot_block),SEEK_SET);
+	fwrite(&sb,sizeof(super_block),1,fs);     
+}
+
+
+int main(){
+	char tmp[10];
+	time_t ltime;
+	time(&ltime);
+
+	{ sb.inode_check[0]=1;     //루트디렉토리 할당하기
+	  sb.inode_check[0]<<=63;
+
+	  sb.data_check[0]=1;
+	  sb.data_check[0]<<=63;
+	}
+
+
+	input_prompt();
+	return 0;
+
+}
+int input_prompt(void )
+{
+	char tmp[40];
+	char order[13];
+	char prompt[40];
+	int i,j;
+	fflush(stdin);
+	while(1)
+	{
+		while(1){
+			if((fs=fopen("myfs","rb+"))==NULL)
+				printf("error : can not find \"myfs\".\n");
+			else break;
+			scanf("%s",tmp);
+			if(0==strcmp("mymkfs",tmp)){ 
+				mymkfs();
+				getchar();
+				break;
+			}
+		}
+		printf("[/%s ]$ ",location);
+		scanf("%[^\n]",prompt);
+		getchar();
+
+
+		for(i=0;i<40;i++)
+		{  
+			if(prompt[i]==' ') break;
+			order[i]=prompt[i];
+		}
+		i++;
+		for(j=0;i<40;j++,i++)
+			tmp[j]=prompt[i];
+
+
+		if(0==strcmp("byebye",order)) exit(1);
+		/*		else if(0==strcmp("mycat",order)) mycat(tmp);
+
+				else if(0==strcmp("myshowfile",order)) myshowfile(tmp);
+
+				else if(0==strcmp("mypwd",order)) mypwd(tmp);
+
+				else if(0==strcmp("mycd",order)) mycd(tmp);
+
+				else if(0==strcmp("mycp",order)) mycp(tmp);
+
+				else if(0==strcmp("mycpto",order)) mycpto(tmp);
+
+				else if(0==strcmp("mycpfrom",order)) mycpfrom(tmp);
+
+				else if(0==strcmp("myrmdir",order)) myrmdir(tmp);
+
+				else if(0==strcmp("myrm",order)) myrm(tmp);
+
+				else if(0==strcmp("mytouch",order)) mytouch(tmp);
+
+				else if(0==strcmp("myshowinode",order)) myshowinode(tmp);
+
+				else if(0==strcmp("myshowblock",order)) myshowblock(tmp);
+
+				else if(0==strcmp("mystate",order)) mystate(tmp);
+
+				else if(0==strcmp("mytree",order)) mytree(tmp);
+
+		 */
+		else if(0==strcmp("mymkdir",order)) mymkdir(tmp);
+
+		else system(prompt);
+
+	}
+}
+unsigned short make_inode(){
+	int i,j,count=0;
+	unsigned long bit;
+		for(i=0;i<8;i++)
+		{ 
+			bit=0x1;
+			bit<<=63;
+			for(j=0;j<64;j++)
+			{ 
+				if(bit & sb.inode_check[i])
+				{  count++;
+				
+					bit>>=0x1;
+				}
+				else 
+				{	sb.data_check[count/64]|=bit;
+			 
+					 break;
+				 
+				    
+			}
+       
+	return count;
+}
+unsigned short make_data(){
+	int i,j,count=0;
+	unsigned long bit;
+	for(i=0;i<16;i++){
+		bit=0x1;
+		bit<<=63;
+		if(sb.data_check[i]==-1){
+			count+=64;
+		}
+		else if(bit & sb.data_check[i]){
+			for(j=0;j<64;j++){
+				if(bit & sb.data_check[i]){
+					count++;
+					bit>>=1;
+				}
+				else{
+					sb.data_check[count/64]|=bit;
+					break;
+				}
+			}
+		}
+		else{
+			sb.data_check[count/64]|=bit;
+			break;
+		}
+	}
+	return count;
+}
+
+void mymkdir(char tmp[])
+{ 
+	int i;
+	unsigned short bit;
+	unsigned short inode;
+	char object[4];
+	ib=(inode_block*)calloc(1,sizeof(inode_block));
+	db=(data_block*)calloc(1,sizeof(data_block));
+    time_t ltime;
+	time(&ltime);
+	struct tm* a;
+    a=localtime(&ltime);
+	inode=make_inode();
+	ib->file_type=1;
+    ib->file_size=0; //////////////////////////////////////////나중에 바꾸자////////
+    ib->time=*a;
+    ib->db_n[0]=make_data(); //direct 
+    //////이미 디렉토리 잇는 경우 고려해서 다시 짜기.
+
+	wirte_inode(inode);
+}
