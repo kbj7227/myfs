@@ -320,3 +320,24 @@ void mystate(){
 	printf("free inode block : %hu\n",512-inode_count);
 	printf("free data block : %hu\n",1024-data_count);
 }
+void mymkdir(char tmp[])
+{ 
+	int i;
+	unsigned short bit;
+	unsigned short inode;
+	char object[4];
+	ib=(inode_block*)calloc(1,sizeof(inode_block));
+	db=(data_block*)calloc(1,sizeof(data_block));
+    time_t ltime;
+	time(&ltime);
+	struct tm* a;
+    a=localtime(&ltime);
+	inode=make_inode();
+	ib->file_type=1;
+    ib->file_size=0; //////////////////////////////////////////나중에 바꾸자////////
+    ib->time=*a;
+    ib->db_n[0]=make_data(); //direct 
+    //////이미 디렉토리 잇는 경우 고려해서 다시 짜기.
+
+	wirte_inode(inode);
+}
