@@ -1,0 +1,365 @@
+#include<stdio.h>
+#include<string.h>
+#include<stdlib.h>
+#include<math.h>
+#include<time.h>
+#define tm_year tm_year+1900
+#define tm_mon tm_mon+1
+typedef struct{
+	short boot;
+}boot_block;
+
+typedef struct{
+	unsigned long inode_check[8];
+	unsigned long data_check[16];
+}super_block;
+
+typedef struct inode_block{
+	_Bool file_type; // 0:file , 1:directory
+	int file_size;
+	struct tm time;
+	unsigned short db_n[3]; // 0:direct 1:single 2:double
+}inode_block;
+
+typedef struct data_block{
+	char data[128];
+}data_block;
+
+typedef struct data_list{
+	char data[128];
+	struct data_list *next;
+}data_list;
+
+typedef struct tree{
+	char name[5];
+	struct tree* child;
+	struct tree* bro;
+}tree;
+
+
+boot_block bb; 
+
+super_block sb;
+inode_block *ib;
+data_block *db;
+
+tree root;
+tree *cur=&root;
+
+int new_tree(char name[]){ ///?대? ?덈뒗 ?대쫫?대㈃ 0, ??留뚮뱾?덉쑝硫?1 由ы꽩
+	tree *a,*check,*tmp;
+	a=(tree*)calloc(1,sizeof(tree));
+	a->child=NULL;
+	a->bro=NULL;
+	int i;
+	for(i=0;i<4;i++)
+		a->name[i]=name[i];
+	a->name[4]='\0';
+	if(cur->child==NULL){
+		cur->child=a;
+	}
+	else{
+		check=cur->child;
+		while(1){
+			if(check->bro==NULL){
+				if(strcmp(check->name,a->name)>0){
+					tmp=cur->child;
+					cur->child=a;
+					a->bro=tmp;
+					return 1;
+				}
+				else if(strcmp(check->name,a->name)==0)
+					return 0;
+				else{
+					check->bro=a;
+					return 1;
+				}
+			}
+			else{
+				if(strcmp(check->bro->name,a->name)>0 && strcmp(check->name,a->name)<0){
+					tmp=check->bro;
+					check->bro=a;
+					a->bro=tmp;
+					return 1;
+				}
+			}
+			check=check->bro;
+		}
+	}
+}
+char location[5];
+unsigned short cur_dir_inode=0;
+FILE *fs;
+void mytree(){
+	tree *a,*children;
+	a=root.child;
+	printf("/\n");
+	while(1){
+		if(a==NULL) break;
+		children=a->child;
+		printf("--* %s\n",a->name);
+		while(1){
+			if(children==NULL) break;
+			printf("-----* %s\n",children->name);
+			children=children->bro;
+		}
+		a=a->bro;
+	}
+}
+
+unsigned short make_inode();
+unsigned short make_data();
+void mystate();
+int input_prompt();
+
+void mk_indirect(unsigned short n){
+	unsigned short bit,db_n;
+	db=(data_block*)calloc(1,sizeof(data_block));
+	db_n=make_data();
+	bit=db_n&0x3fc;
+	bit>>=2;
+	db->data[0]|=bit;
+	bit=db_n&0x3;
+	bit<<=6;
+	db->data[1]|=bit;
+
+	db_n=make_data();
+	bit=db_n&0x3f0;
+	bit>>=4;
+	db->data[1]|=bit;
+	bit=db_n&0xf;
+	bit<<=4;
+	db->data[2]|=bit;
+
+	db_n=make_data();
+	bit=db_n&0x3c0;
+	bit>>=6;
+	db->data[2]|=bit;
+	bit=db_n&0x3f;
+	bit<<=2;
+	db->data[3]|=bit;
+
+	db_n=make_data();
+	bit=db_n&0x300;
+	bit>>=8;
+	db->data[3]|=bit;
+	bit=db_n&0xff;
+	db->data[4]|=bit; // ?レ옄 4媛쒖뵫 洹쒖튃??媛吏?
+}
+
+void mymkfs(){
+	bb.boot=0;
+	short i;
+
+	sb.inode_check[0]=1;
+	sb.inode_check[0]<<=63;
+
+	sb.data_check[0]=1;
+	sb.data_check[0]<<=63;
+
+	ib=(inode_block*)calloc(1,sizeof(inode_block));
+	db=(data_block*)calloc(1,sizeof(data_block));
+
+	fs=fopen("myfs","wb+");
+	fwrite(&bb,sizeof(boot_block),1,fs);
+	fwrite(&sb,sizeof(super_block),1,fs);
+	for(i=0;i<512;i++){
+		fwrite(ib,sizeof(inode_block),1,fs);
+	}
+	for(i=0;i<1024;i++){
+		fwrite(db,sizeof(data_block),1,fs);
+	}
+	rewind(fs);
+	free(ib);
+	free(db);
+}
+void read_super(){
+	fseek(fs,sizeof(boot_block),SEEK_SET);
+	fread(&sb,1,sizeof(super_block),fs);
+}			
+
+void write_data(unsigned short n){
+	int i;
+	fseek(fs,sizeof(boot_block),SEEK_SET);
+	fseek(fs,sizeof(super_block),SEEK_CUR);
+	fseek(fs,sizeof(inode_block)*512,SEEK_CUR);
+	for(i=0;i<n;i++){
+		fseek(fs,sizeof(data_block),SEEK_CUR);
+	}
+	fwrite(db,sizeof(data_block),1,fs); 
+}	
+void write_inode(unsigned short n){
+	int i;
+	fseek(fs,sizeof(boot_block),SEEK_SET);
+	fseek(fs,sizeof(super_block),SEEK_CUR);
+	for(i=0;i<n;i++){
+		fseek(fs,sizeof(inode_block),SEEK_CUR);
+	}
+	fwrite(ib,sizeof(inode_block),1,fs); 
+}	
+
+int main(){
+	char tmp[10];
+	time_t ltime;
+	time(&ltime);
+	root.bro=NULL; root.child=NULL;
+
+	while(1){
+		if((fs=fopen("myfs","rb+"))==NULL)
+			printf("error : can not find \"myfs\".\n");
+		else{
+			read_super();
+			break;
+		}
+		scanf("%s",tmp);
+		if(0==strcmp("mymkfs",tmp)){ 
+			mymkfs();
+			getchar();
+			break;
+		}
+	}
+
+	input_prompt();
+
+	return 0;
+
+}
+
+int input_prompt(void )
+{
+	int i,j;
+	char tmp[40];
+	char order[13];
+	char prompt[40];
+	while(1)
+	{
+		prompt[0]=0;
+		fflush(stdin);
+		printf("[/%s ]$ ",location);
+		scanf("%[^\n]",prompt);
+		getchar();
+
+
+		for(i=0;i<40;i++)
+		{  
+			if(prompt[i]==' ') break;
+			order[i]=prompt[i];
+		}
+		i++;
+		for(j=0;i<40;j++,i++)
+			tmp[j]=prompt[i];
+
+
+		if(0==strcmp("byebye",order)) exit(1);
+
+		/*		else if(0==strcmp("mycat",order)) mycat(tmp);
+
+				else if(0==strcmp("myshowfile",order)) myshowfile(tmp);
+
+				else if(0==strcmp("mypwd",order)) mypwd(tmp);
+
+				else if(0==strcmp("mycd",order)) mycd(tmp);
+
+				else if(0==strcmp("mycp",order)) mycp(tmp);
+
+				else if(0==strcmp("mycpto",order)) mycpto(tmp);
+
+				else if(0==strcmp("mycpfrom",order)) mycpfrom(tmp);
+
+				else if(0==strcmp("myrmdir",order)) myrmdir(tmp);
+
+				else if(0==strcmp("myrm",order)) myrm(tmp);
+
+				else if(0==strcmp("mytouch",order)) mytouch(tmp);
+
+				else if(0==strcmp("myshowinode",order)) myshowinode(tmp);
+
+				else if(0==strcmp("myshowblock",order)) myshowblock(tmp);
+*/
+		else if(0==strcmp("mytree",order)) mytree(tmp);
+
+		else if(0==strcmp("mystate",order)) mystate(tmp);
+
+		//	else if(0==strcmp("mymkdir",order)) mymkdir(tmp);
+
+		else system(prompt);
+
+	}
+}
+unsigned short make_inode(){
+	int i,j;
+	unsigned long bit;
+	unsigned short count=0;
+	for(i=0;i<8;i++){
+		bit=0x1;
+		bit<<=63;
+		if(sb.inode_check[i]){
+			for(j=0;j<64;j++){
+				if(bit & sb.inode_check[i]){
+					count++;
+					bit>>=1;
+				}
+				else{
+					sb.inode_check[count/64]|=bit;
+					break;
+				}
+			}
+		}
+		else{
+			sb.inode_check[count/64]|=bit;
+			break;
+		}
+	}
+	return count; //苑?李⑤㈃ 512
+}
+unsigned short make_data(){
+	int i,j;
+	unsigned long bit,count=0;
+	for(i=0;i<16;i++){
+		bit=0x1;
+		bit<<=63;
+		if(sb.data_check[i]){
+			for(j=0;j<64;j++){
+				if(bit & sb.data_check[i]){
+					count++;
+					bit>>=1;
+				}
+				else{
+					sb.data_check[count/64]|=bit;
+					break;
+				}
+			}
+		}
+		else{
+			sb.data_check[count/64]|=bit;
+			break;
+		}
+	}
+	return count; // 苑?李⑤㈃ 1024
+}
+void mystate(){
+	int i,j;
+	unsigned long bit;
+	unsigned short data_count=0,inode_count=0;
+	for(i=0;i<8;i++){
+		bit=0x1;
+		bit<<=63;
+		for(j=0;j<64;j++){
+			if(bit & sb.inode_check[i])
+				inode_count++;
+			bit>>=1;
+		}
+
+	}
+	for(i=0;i<16;i++){
+		bit=0x1;
+		bit<<=63;
+		for(j=0;j<64;j++){
+			if(bit & sb.data_check[i])
+				data_count++;
+			bit>>=1;
+		}
+	}
+	printf("free inode block : %hu\n",512-inode_count);
+	printf("free data block : %hu\n",1024-data_count);
+}
