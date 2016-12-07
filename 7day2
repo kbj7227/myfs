@@ -339,5 +339,16 @@ void mymkdir(char tmp[])
     ib->db_n[0]=make_data(); //direct 
     //////이미 디렉토리 잇는 경우 고려해서 다시 짜기.
 
+    bit=0x1;                              ///////inode add to datablock
+    bit<<=9;
+    if(bit & inode) { db->data[5]+=2; }
+	bit>>=1;
+	if(bit & inode) { db->data[5]+=1; }
+    
+	for(i=0;i<8;i++)
+	{    bit>>=1;
+		if(bit & inode) {db->data[6]+=bit;}
+    }
+
 	wirte_inode(inode);
 }
