@@ -22,12 +22,8 @@ typedef struct inode_block{
 
 typedef struct data_block{
 	char data[128];
+	struct data_block *next;
 }data_block;
-
-typedef struct data_list{
-	char data[128];
-	struct data_list *next;
-}data_list;
 
 typedef struct tree{
 	char name[5];
@@ -294,9 +290,9 @@ void write_data(unsigned short n){
 	fseek(fs,sizeof(super_block),SEEK_CUR);
 	fseek(fs,sizeof(inode_block)*512,SEEK_CUR);
 	for(i=0;i<n;i++){
-		fseek(fs,sizeof(data_block),SEEK_CUR);
+		fseek(fs,128,SEEK_CUR);
 	}
-	fwrite(db,sizeof(data_block),1,fs); 
+	fwrite(db,128,1,fs); 
 }	
 void write_inode(unsigned short n){
 	int i;
